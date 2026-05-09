@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Unstable SMP — Staff Dashboard</title>
+<style>
+  :root {
+    --bg:       #0f1117;
+    --surface:  #1a1d27;
+    --card:     #21253a;
+    --border:   #2e3352;
+    --gold:     #d4af37;
+    --gold2:    #f0cc5a;
+    --text:     #e8eaf0;
+    --muted:    #8b91b0;
+    --red:      #e05252;
+    --green:    #4caf7d;
+    --blue:     #5b8dee;
+    --radius:   10px;
+    --shadow:   0 4px 24px rgba(0,0,0,.4);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; }
+
+  /* ── Layout ── */
+  #app { display:flex; min-height:100vh; }
+  #sidebar {
+    width:220px; background:var(--surface); border-right:1px solid var(--border);
+    display:flex; flex-direction:column; padding:24px 0; position:fixed; height:100vh; z-index:10;
+  }
+  #sidebar .logo { padding:0 20px 24px; border-bottom:1px solid var(--border); }
+  #sidebar .logo h1 { font-size:16px; color:var(--gold); font-weight:700; letter-spacing:.5px; }
+  #sidebar .logo p  { font-size:11px; color:var(--muted); margin-top:2px; }
+  #sidebar nav { padding:16px 0; flex:1; }
+  #sidebar nav a {
+    display:flex; align-items:center; gap:10px; padding:10px 20px; color:var(--muted);
+    text-decoration:none; font-size:14px; cursor:pointer; transition:.15s;
+    border-left:3px solid transparent;
+  }
+  #sidebar nav a:hover { color:var(--text); background:rgba(255,255,255,.04); }
+  #sidebar nav a.active { color:var(--gold); border-left-color:var(--gold); background:rgba(212,175,55,.08); }
+  #sidebar nav a .icon { width:18px; text-align:center; }
+  #sidebar .user-info {
+    padding:16px 20px; border-top:1px solid var(--border);
+    display:flex; align-items:center; gap:10px;
+  }
+  #sidebar .user-info img { width:36px; height:36px; border-radius:50%; border:2px solid var(--gold); }
+  #sidebar .user-info .name { font-size:13px; font-weight:600; }
+  #sidebar .user-info .tag  { font-size:11px; color:var(--muted); }
+  #main { margin-left:220px; flex:1; padding:32px; max-width:1200px; }
+  .page { display:none; }
+  .page.active { display:block; }
+  h2 { font-size:22px; font-weight:700; color:var(--text); margin-bottom:6px; }
+  .subtitle { color:var(--muted); font-size:14px; margin-bottom:28px; }
+
+  /* ── Cards ── */
+  .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px; }
+  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:28px; }
+  .stat-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px; }
+  .stat-card .label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; }
+  .stat-card .value { font-size:32px; font-weight:700; color:var(--gold); margin-top:6px; }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  thead th { text-align:left; padding:10px 14px; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.6px; border-bottom:1px solid var(--border); }
+  tbody tr { border-bottom:1px solid var(--border); transition:.1s; }
+  tbody tr:hover { background:rgba(255,255,255,.03); }
+  tbody td { padding:12px 14px; }
+  .badge {
+    display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:600; text-transform:uppercase;
+  }
+  .badge.management { background:rgba(212,175,55,.15); color:var(--gold); }
+  .badge.admin      { background:rgba(91,141,238,.15); color:var(--blue); }
+  .badge.staff      { background:rgba(139,145,176,.15); color:var(--muted); }
+
+  /* ── Buttons ── */
+  .btn {
+    display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:6px;
+    font-size:13px; font-weight:600; cursor:pointer; border:none; transition:.15s;
+  }
+  .btn-gold   { background:var(--gold); color:#000; }
+  .btn-gold:hover { background:var(--gold2); }
+  .btn-ghost  { background:transparent; color:var(--muted); border:1px solid var(--border); }
+  .btn-ghost:hover { color:var(--text); border-color:var(--muted); }
+  .btn-red    { background:rgba(224,82,82,.15); color:var(--red); border:1px solid rgba(224,82,82,.3); }
+  .btn-red:hover { background:rgba(224,82,82,.25); }
+  .btn-green  { background:rgba(76,175,125,.15); color:var(--green); border:1px solid rgba(76,175,125,.3); }
+  .btn-green:hover { background:rgba(76,175,125,.25); }
+  .btn-sm { padding:5px 12px; font-size:12px; }
+
+  /* ── Forms ── */
+  .form-group { margin-bottom:16px; }
+  .form-group label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:.6px; }
+  .form-group input, .form-group select {
+    width:100%; padding:10px 12px; background:var(--surface); border:1px solid var(--border);
+    border-radius:6px; color:var(--text); font-size:14px; outline:none; transition:.15s;
+  }
+  .form-group input:focus, .form-group select:focus { border-color:var(--gold); }
+  .form-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+
+  /* ── Modal ── */
+  .modal-backdrop {
+    position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:100;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:28px; width:100%; max-width:480px; box-shadow:var(--shadow); }
+  .modal h3 { font-size:18px; margin-bottom:20px; }
+  .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+  .hidden { display:none !important; }
+
+  /* ── Quota bars ── */
+  .quota-bar-wrap { display:flex; align-items:center; gap:8px; }
+  .quota-bar { flex:1; height:6px; background:var(--border); border-radius:3px; overflow:hidden; }
+  .quota-bar-fill { height:100%; background:var(--gold); border-radius:3px; transition:.3s; }
+  .quota-bar-fill.over { background:var(--green); }
+  .quota-bar-fill.under { background:var(--red); }
+  .quota-num { font-size:12px; color:var(--muted); white-space:nowrap; }
+
+  /* ── Login ── */
+  #login-page {
+    display:flex; align-items:center; justify-content:center; min-height:100vh;
+    background:var(--bg);
+  }
+  .login-box { text-align:center; }
+  .login-box .logo-big { font-size:28px; font-weight:800; color:var(--gold); margin-bottom:8px; }
+  .login-box p { color:var(--muted); margin-bottom:28px; font-size:15px; }
+  .btn-discord { background:#5865F2; color:#fff; padding:12px 28px; font-size:15px; border-radius:8px; border:none; cursor:pointer; font-weight:700; transition:.15s; }
+  .btn-discord:hover { background:#4752c4; }
+
+  /* ── Toasts ── */
+  #toast-container { position:fixed; bottom:24px; right:24px; z-index:999; display:flex; flex-direction:column; gap:8px; }
+  .toast { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:12px 18px; font-size:14px; box-shadow:var(--shadow); animation:slideIn .2s ease; }
+  .toast.success { border-color:var(--green); color:var(--green); }
+  .toast.error   { border-color:var(--red);   color:var(--red); }
+  @keyframes slideIn { from { transform:translateX(60px); opacity:0; } to { transform:translateX(0); opacity:1; } }
+
+  .section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .top-gap { margin-top:24px; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-page">
+  <div class="login-box">
+    <div class="logo-big">⚡ Unstable SMP</div>
+    <p>Staff Management Dashboard</p>
+    <button class="btn-discord" onclick="loginWithDiscord()">Login with Discord</button>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="app" class="hidden">
+  <div id="sidebar">
+    <div class="logo">
+      <h1>⚡ Unstable SMP</h1>
+      <p>Staff Dashboard</p>
+    </div>
+    <nav>
+      <a class="active" onclick="nav('overview')" data-page="overview"><span class="icon">📊</span> Overview</a>
+      <a onclick="nav('staff')"    data-page="staff">   <span class="icon">👥</span> Staff</a>
+      <a onclick="nav('quota')"    data-page="quota">   <span class="icon">📋</span> Quota</a>
+      <a onclick="nav('config')"   data-page="config">  <span class="icon">⚙️</span> Config</a>
+      <a onclick="nav('access')"   data-page="access">  <span class="icon">🔐</span> Access</a>
+    </nav>
+    <div class="user-info" id="user-info">
+      <img id="user-avatar" src="" alt=""/>
+      <div>
+        <div class="name" id="user-name">—</div>
+        <div class="tag" id="user-tag">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="main">
+    <!-- OVERVIEW -->
+    <div class="page active" id="page-overview">
+      <h2>Overview</h2>
+      <p class="subtitle">Staff system at a glance</p>
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card"><div class="label">Total Staff</div><div class="value" id="stat-staff">—</div></div>
+        <div class="stat-card"><div class="label">Ticket Quota</div><div class="value" id="stat-tickets">—</div></div>
+        <div class="stat-card"><div class="label">Punishments</div><div class="value" id="stat-punishments">—</div></div>
+        <div class="stat-card"><div class="label">Partners</div><div class="value" id="stat-partners">—</div></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:14px;font-size:15px;">Staff by Type</h3>
+        <div id="by-type-list" style="display:flex;gap:16px;flex-wrap:wrap;"></div>
+      </div>
+    </div>
+
+    <!-- STAFF -->
+    <div class="page" id="page-staff">
+      <div class="section-header">
+        <div><h2>Staff Members</h2><p class="subtitle">Manage all registered staff</p></div>
+        <button class="btn btn-gold" onclick="openAddStaff()">+ Add Staff</button>
+      </div>
+      <div class="card table-wrap">
+        <table>
+          <thead><tr>
+            <th>User</th><th>IGN</th><th>Type</th>
+            <th>Tickets</th><th>Partners</th><th>Punishments</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="staff-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- QUOTA -->
+    <div class="page" id="page-quota">
+      <h2>Quota Management</h2>
+      <p class="subtitle">Set minimums and view progress</p>
+
+      <div class="card" style="margin-bottom:20px;">
+        <div class="section-header">
+          <h3 style="font-size:15px;">Minimum Requirements</h3>
+          <button class="btn btn-ghost btn-sm" onclick="saveMinimums()">Save Changes</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>Staff Type</th><th>Tickets</th><th>Partners</th><th>Punishments</th></tr></thead>
+            <tbody id="minimums-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-header">
+          <h3 style="font-size:15px;">Quota Progress</h3>
+          <button class="btn btn-red btn-sm" onclick="clearAllQuota()">Clear All Quotas</button>
+        </div>
+        <div class="table-wrap top-gap">
+          <table>
+            <thead><tr><th>User</th><th>IGN</th><th>Type</th><th>Tickets</th><th>Partners</th><th>Punishments</th><th>Edit</th></tr></thead>
+            <tbody id="quota-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONFIG -->
+    <div class="page" id="page-config">
+      <h2>Bot Config</h2>
+      <p class="subtitle">Edit staff_config.json fields (token is never shown)</p>
+      <div class="card">
+        <div id="config-form"></div>
+        <div style="margin-top:20px;">
+          <button class="btn btn-gold" onclick="saveConfig()">Save Config</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCESS -->
+    <div class="page" id="page-access">
+      <h2>Dashboard Access</h2>
+      <p class="subtitle">Manage who can log into this dashboard</p>
+      <div class="card" style="margin-bottom:20px;">
+        <div class="section-header">
+          <h3 style="font-size:15px;">Allowed Users</h3>
+        </div>
+        <div id="allowed-users-list" style="margin-top:12px;"></div>
+        <div style="display:flex;gap:10px;margin-top:16px;">
+          <input type="text" id="new-user-id" placeholder="Discord User ID" style="flex:1;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;outline:none;"/>
+          <button class="btn btn-gold" onclick="addAllowedUser()">Add User</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-backdrop hidden" id="modal-add-staff">
+  <div class="modal">
+    <h3>Add Staff Member</h3>
+    <div class="form-group"><label>Discord User ID</label><input type="text" id="add-user-id" placeholder="123456789012345678"/></div>
+    <div class="form-group"><label>Minecraft IGN</label><input type="text" id="add-ign" placeholder="PlayerName"/></div>
+    <div class="form-group"><label>Staff Type</label>
+      <select id="add-staff-type">
+        <option value="staff">Staff</option>
+        <option value="admin">Admin</option>
+        <option value="management">Management</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-staff')">Cancel</button>
+      <button class="btn btn-gold" onclick="addStaff()">Add</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="modal-edit-staff">
+  <div class="modal">
+    <h3>Edit Staff Member</h3>
+    <input type="hidden" id="edit-user-id"/>
+    <div class="form-group"><label>Minecraft IGN</label><input type="text" id="edit-ign"/></div>
+    <div class="form-group"><label>Staff Type</label>
+      <select id="edit-staff-type">
+        <option value="staff">Staff</option>
+        <option value="admin">Admin</option>
+        <option value="management">Management</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-staff')">Cancel</button>
+      <button class="btn btn-gold" onclick="saveEditStaff()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="modal-edit-quota">
+  <div class="modal">
+    <h3>Edit Quota</h3>
+    <input type="hidden" id="eq-user-id"/>
+    <div class="form-group"><label>Quota Type</label>
+      <select id="eq-type">
+        <option value="tickets">Tickets</option>
+        <option value="partners">Partners</option>
+        <option value="punishments">Punishments</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Amount</label><input type="number" id="eq-amount" min="0"/></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-quota')">Cancel</button>
+      <button class="btn btn-gold" onclick="saveQuota()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+const API = 'http://localhost:8000';
+
+// ── State ──
+let staffData = [], minimumsData = {}, configData = {};
+
+// ── API ──
+async function apiFetch(path, opts={}) {
+  const res = await fetch(API + path, { credentials:'include', headers:{'Content-Type':'application/json'}, ...opts });
+  const data = await res.json().catch(()=>({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+// ── Toast ──
+function toast(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>el.remove(), 3000);
+}
+
+// ── Auth ──
+async function loginWithDiscord() {
+  const data = await apiFetch('/auth/login');
+  window.location.href = data.url;
+}
+
+async function checkAuth() {
+  // Handle OAuth callback
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('code')) {
+    try {
+      const user = await apiFetch('/auth/callback?' + params.toString());
+      window.history.replaceState({}, '', window.location.pathname);
+      showDashboard(user);
+    } catch(e) {
+      toast('Access denied: ' + e.message, 'error');
+    }
+    return;
+  }
+  try {
+    const user = await apiFetch('/auth/me');
+    showDashboard(user);
+  } catch(e) {
+    // Not logged in — show login page
+  }
+}
+
+function showDashboard(user) {
+  document.getElementById('login-page').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('user-name').textContent = user.username;
+  document.getElementById('user-tag').textContent = 'ID: ' + user.id;
+  if (user.avatar) {
+    document.getElementById('user-avatar').src = `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`;
+  } else {
+    document.getElementById('user-avatar').src = `https://cdn.discordapp.com/embed/avatars/0.png`;
+  }
+  loadAll();
+}
+
+// ── Navigation ──
+function nav(page) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('#sidebar nav a').forEach(a=>a.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  document.querySelector(`[data-page="${page}"]`).classList.add('active');
+  if (page==='staff')    renderStaff();
+  if (page==='quota')    renderQuota();
+  if (page==='config')   renderConfig();
+  if (page==='access')   renderAccess();
+  if (page==='overview') renderOverview();
+}
+
+// ── Load All ──
+async function loadAll() {
+  try {
+    [staffData, minimumsData, configData] = await Promise.all([
+      apiFetch('/staff'),
+      apiFetch('/minimums'),
+      apiFetch('/config'),
+    ]);
+    renderOverview();
+  } catch(e) { toast('Failed to load data: ' + e.message, 'error'); }
+}
+
+// ── Overview ──
+async function renderOverview() {
+  try {
+    const s = await apiFetch('/stats');
+    document.getElementById('stat-staff').textContent        = s.total_staff;
+    document.getElementById('stat-tickets').textContent      = s.total_tickets;
+    document.getElementById('stat-punishments').textContent  = s.total_punishments;
+    document.getElementById('stat-partners').textContent     = s.total_partners;
+    const btl = document.getElementById('by-type-list');
+    btl.innerHTML = '';
+    const colors = {management:' --gold', admin:'var(--blue)', staff:'var(--muted)'};
+    for (const [type, count] of Object.entries(s.by_type)) {
+      btl.innerHTML += `<div class="stat-card" style="min-width:120px;padding:14px 18px;">
+        <div class="label">${type}</div>
+        <div class="value" style="font-size:24px;">${count}</div>
+      </div>`;
+    }
+  } catch(e) {}
+}
+
+// ── Staff ──
+function renderStaff() {
+  const tbody = document.getElementById('staff-table-body');
+  tbody.innerHTML = staffData.map(s => `
+    <tr>
+      <td><code style="color:var(--muted);font-size:12px;">${s.user_id}</code></td>
+      <td>${s.ign || '<span style="color:var(--muted)">—</span>'}</td>
+      <td><span class="badge ${s.staff_type}">${s.staff_type}</span></td>
+      <td>${s.quota.tickets}</td>
+      <td>${s.quota.partners}</td>
+      <td>${s.quota.punishments}</td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="openEditStaff('${s.user_id}')">Edit</button>
+        <button class="btn btn-red btn-sm" onclick="removeStaff('${s.user_id}')">Remove</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">No staff registered</td></tr>';
+}
+
+function openAddStaff() { document.getElementById('modal-add-staff').classList.remove('hidden'); }
+
+async function addStaff() {
+  const uid  = document.getElementById('add-user-id').value.trim();
+  const ign  = document.getElementById('add-ign').value.trim();
+  const st   = document.getElementById('add-staff-type').value;
+  try {
+    await apiFetch('/staff', {method:'POST', body:JSON.stringify({user_id:uid,ign,staff_type:st})});
+    toast('Staff member added');
+    closeModal('modal-add-staff');
+    staffData = await apiFetch('/staff');
+    renderStaff();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function openEditStaff(uid) {
+  const s = staffData.find(x=>x.user_id===uid);
+  if (!s) return;
+  document.getElementById('edit-user-id').value    = uid;
+  document.getElementById('edit-ign').value        = s.ign;
+  document.getElementById('edit-staff-type').value = s.staff_type;
+  document.getElementById('modal-edit-staff').classList.remove('hidden');
+}
+
+async function saveEditStaff() {
+  const uid = document.getElementById('edit-user-id').value;
+  const ign = document.getElementById('edit-ign').value.trim();
+  const st  = document.getElementById('edit-staff-type').value;
+  try {
+    await apiFetch(`/staff/${uid}`, {method:'PATCH', body:JSON.stringify({ign,staff_type:st})});
+    toast('Staff member updated');
+    closeModal('modal-edit-staff');
+    staffData = await apiFetch('/staff');
+    renderStaff();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function removeStaff(uid) {
+  if (!confirm('Remove this staff member?')) return;
+  try {
+    await apiFetch(`/staff/${uid}`, {method:'DELETE'});
+    toast('Staff member removed');
+    staffData = await apiFetch('/staff');
+    renderStaff();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Quota ──
+function renderQuota() {
+  const types = ['staff','admin','management'];
+  const qtypes = ['tickets','partners','punishments'];
+
+  // Minimums table
+  document.getElementById('minimums-table').innerHTML = types.map(st => `
+    <tr>
+      <td><span class="badge ${st}">${st}</span></td>
+      ${qtypes.map(qt => `
+        <td><input type="number" min="0" id="min-${st}-${qt}"
+          value="${(minimumsData[st]||{})[qt]||0}"
+          style="width:70px;padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;"/>
+        </td>
+      `).join('')}
+    </tr>
+  `).join('');
+
+  // Quota progress table
+  document.getElementById('quota-table-body').innerHTML = staffData.map(s => {
+    const mins = minimumsData[s.staff_type] || {};
+    const bars = qtypes.map(qt => {
+      const val = s.quota[qt];
+      const min = mins[qt] || 0;
+      const pct = min > 0 ? Math.min(100, (val/min)*100) : 100;
+      const cls = min === 0 ? '' : val >= min ? 'over' : 'under';
+      return `<td>
+        <div class="quota-bar-wrap">
+          <div class="quota-bar"><div class="quota-bar-fill ${cls}" style="width:${pct}%"></div></div>
+          <span class="quota-num">${val}/${min||'?'}</span>
+        </div>
+      </td>`;
+    }).join('');
+    return `<tr>
+      <td><code style="color:var(--muted);font-size:12px;">${s.user_id}</code></td>
+      <td>${s.ign||'—'}</td>
+      <td><span class="badge ${s.staff_type}">${s.staff_type}</span></td>
+      ${bars}
+      <td><button class="btn btn-ghost btn-sm" onclick="openEditQuota('${s.user_id}')">Edit</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">No staff registered</td></tr>';
+}
+
+async function saveMinimums() {
+  const types  = ['staff','admin','management'];
+  const qtypes = ['tickets','partners','punishments'];
+  try {
+    for (const st of types) for (const qt of qtypes) {
+      const val = parseInt(document.getElementById(`min-${st}-${qt}`).value) || 0;
+      await apiFetch('/minimums', {method:'POST', body:JSON.stringify({staff_type:st,quota_type:qt,minimum:val})});
+    }
+    minimumsData = await apiFetch('/minimums');
+    toast('Minimums saved');
+    renderQuota();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function openEditQuota(uid) {
+  document.getElementById('eq-user-id').value = uid;
+  document.getElementById('eq-amount').value  = 0;
+  document.getElementById('modal-edit-quota').classList.remove('hidden');
+}
+
+async function saveQuota() {
+  const uid = document.getElementById('eq-user-id').value;
+  const qt  = document.getElementById('eq-type').value;
+  const amt = parseInt(document.getElementById('eq-amount').value);
+  try {
+    await apiFetch(`/quota/${uid}`, {method:'PATCH', body:JSON.stringify({quota_type:qt,amount:amt})});
+    toast('Quota updated');
+    closeModal('modal-edit-quota');
+    staffData = await apiFetch('/staff');
+    renderQuota();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function clearAllQuota() {
+  if (!confirm('Clear ALL quotas for everyone? This cannot be undone.')) return;
+  try {
+    await apiFetch('/quota/clear', {method:'POST'});
+    toast('All quotas cleared');
+    staffData = await apiFetch('/staff');
+    renderQuota();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Config ──
+function renderConfig() {
+  const labels = {
+    STAFF_SERVER_ID:           'Staff Server ID',
+    MANAGEMENT_ROLE_ID:        'Management Role ID',
+    QUOTA_FAIL_CHANNEL_ID:     'Quota Fail Channel ID',
+    PARTNER_REVIEW_CHANNEL_ID: 'Partner Review Channel ID',
+    PARTNER_PANEL_CHANNEL_ID:  'Partner Panel Channel ID',
+    TICKET_LOG_CHANNEL_ID:     'Ticket Log Channel ID',
+    PUNISHMENT_LOG_CHANNEL_ID: 'Punishment Log Channel ID',
+  };
+  document.getElementById('config-form').innerHTML = Object.entries(labels).map(([k,label]) => `
+    <div class="form-group">
+      <label>${label}</label>
+      <input type="text" id="cfg-${k}" value="${configData[k]||0}" placeholder="0"/>
+    </div>
+  `).join('');
+}
+
+async function saveConfig() {
+  const keys = [
+    'STAFF_SERVER_ID','MANAGEMENT_ROLE_ID','QUOTA_FAIL_CHANNEL_ID',
+    'PARTNER_REVIEW_CHANNEL_ID','PARTNER_PANEL_CHANNEL_ID',
+    'TICKET_LOG_CHANNEL_ID','PUNISHMENT_LOG_CHANNEL_ID',
+  ];
+  const data = {};
+  keys.forEach(k => { data[k] = document.getElementById('cfg-'+k).value; });
+  try {
+    await apiFetch('/config', {method:'PATCH', body:JSON.stringify(data)});
+    toast('Config saved — restart the bot for changes to take effect');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Access ──
+async function renderAccess() {
+  try {
+    const data = await apiFetch('/admin/allowed-users');
+    const list = document.getElementById('allowed-users-list');
+    list.innerHTML = data.allowed_users.map(uid => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
+        <code style="color:var(--text);">${uid}</code>
+        <button class="btn btn-red btn-sm" onclick="removeAllowedUser('${uid}')">Remove</button>
+      </div>
+    `).join('') || '<p style="color:var(--muted);">No users configured</p>';
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function addAllowedUser() {
+  const uid = document.getElementById('new-user-id').value.trim();
+  if (!uid) return;
+  try {
+    await apiFetch('/admin/allowed-users', {method:'POST', body:JSON.stringify({user_id:uid})});
+    document.getElementById('new-user-id').value = '';
+    toast('User added');
+    renderAccess();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function removeAllowedUser(uid) {
+  if (!confirm(`Remove user ${uid} from dashboard access?`)) return;
+  try {
+    await apiFetch(`/admin/allowed-users/${uid}`, {method:'DELETE'});
+    toast('User removed');
+    renderAccess();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Modal helpers ──
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+document.querySelectorAll('.modal-backdrop').forEach(m => {
+  m.addEventListener('click', e => { if (e.target===m) m.classList.add('hidden'); });
+});
+
+// ── Init ──
+checkAuth();
+</script>
+</body>
+</html>
